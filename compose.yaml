@@ -1,0 +1,14 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: openai-privacy-filter:local
+    env_file:
+      - .env
+    environment:
+      OPF_DEVICE: ${OPF_DEVICE:-cpu}
+      PORT: 8080
+    ports:
+      - "8080:8080"
+    restart: unless-stopped

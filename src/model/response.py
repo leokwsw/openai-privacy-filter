@@ -21,6 +21,13 @@ class SpanOut(APIModel):
     placeholder: str = Field(description="Replacement placeholder for the span")
 
 
+class RedactionSummary(APIModel):
+    output_mode: str = Field(description="Output mode used by the OPF runtime")
+    span_count: int = Field(description="Total number of detected spans")
+    by_label: dict[str, int] = Field(description="Detected span counts grouped by privacy label")
+    decoded_mismatch: bool = Field(description="Whether decoded output mismatched internal expectations")
+
+
 class RedactRequest(APIModel):
     text: str = Field(..., description="Text to redact")
 
@@ -35,7 +42,7 @@ class RedactResponse(APIModel):
     text: str = Field(description="Original text input")
     redacted_text: str = Field(description="Text after redaction")
     detected_spans: list[SpanOut] = Field(description="Detected spans in the original text")
-    summary: dict[str, int] = Field(description="Per-label detection summary")
+    summary: RedactionSummary = Field(description="Structured redaction summary emitted by OPF")
     warning: str | None = Field(default=None, description="Optional warning emitted by OPF")
     latency_ms: float = Field(description="Latency for the redaction request in milliseconds")
 

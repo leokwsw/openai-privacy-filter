@@ -2,7 +2,7 @@ import logging
 import os
 import time
 from contextlib import asynccontextmanager
-from typing import Iterator
+from typing import Any, AsyncGenerator
 
 from fastapi import FastAPI, HTTPException
 
@@ -25,20 +25,21 @@ _redactor: OPF | None = None
 
 
 def _load_redactor() -> OPF:
-    device = os.getenv("OPF_DEVICE", "cpu")
+    requested_device = os.getenv("OPF_DEVICE", "cpu")
     output_mode = os.getenv("OPF_OUTPUT_MODE", "typed")
     checkpoint = os.getenv("OPF_CHECKPOINT") or None
 
     logger.info(
-        "Loading OPF model (device=%s, output_mode=%s)...",
-        device,
+        "Loading OPF model (requested_device=%s, resolved_device=%s, output_mode=%s)...",
+        requested_device,
+        "cpu",
         output_mode,
     )
 
     start = time.monotonic()
     redactor = OPF(
         model=checkpoint,
-        device=device,
+        device="cpu",
         output_mode=output_mode,
     )
     redactor.get_runtime()
@@ -49,7 +50,7 @@ def _load_redactor() -> OPF:
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI) -> Iterator[None]:
+async def lifespan(_: FastAPI) -> AsyncGenerator[None, Any]:
     global _redactor
     _redactor = _load_redactor()
     try:

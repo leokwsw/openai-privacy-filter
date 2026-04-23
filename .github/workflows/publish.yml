@@ -10,6 +10,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   publish:
@@ -33,20 +34,24 @@ jobs:
           password: ${{ secrets.GH_TOKEN }}
 
       - name: Extract Docker metadata
-        id: meta
+        id: meta_cpu
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ghcr.io/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=branch
             type=ref,event=tag
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=cpu
+            type=raw,value=latest-cpu,enable={{is_default_branch}}
 
-      - name: Build and push Docker image
+      - name: Build and push CPU Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
+          build-args: |
+            TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.meta_cpu.outputs.tags }}
+          labels: ${{ steps.meta_cpu.outputs.labels }}

@@ -153,39 +153,6 @@ OPF_DEVICE=cpu
 OPF_OUTPUT_MODE=typed
 ```
 
-## GitHub Actions 自动发布镜像
-
-项目已经内置工作流：[`.github/workflows/publish.yml`](./.github/workflows/publish.yml)
-
-它会把镜像发布到 GitHub Container Registry：
-
-```text
-ghcr.io/leokwsw/openai-privacy-filter
-```
-
-触发条件：
-
-- 推送到 `main`
-- 推送版本标签，例如 `v1.0.0`
-- 手动触发 workflow
-
-请确认仓库已开启 GitHub Actions，并允许写入 packages。
-
-## 项目结构
-
-```text
-.
-├── .github/workflows/publish.yml
-├── compose.yaml
-├── Dockerfile
-├── main.py
-├── requirements.txt
-├── src/
-│   ├── app.py
-│   └── model/response.py
-└── privacy-filter/
-```
-
 ## 项目定位
 
 这个仓库不是 OpenAI 官方仓库，而是基于官方 OpenAI Privacy Filter 做的部署封装。

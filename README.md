@@ -90,6 +90,8 @@ The API starts on `http://127.0.0.1:8080`.
 
 ### 2. Docker
 
+CPU image:
+
 Build the image:
 
 ```bash
@@ -127,7 +129,7 @@ docker compose down
 Common options:
 
 - `PORT`: API port, default `8080`
-- `OPF_DEVICE`: model device, default `cpu`
+- `OPF_DEVICE`: `cpu`, `cuda`, `mps`, or `auto`; default `cpu`
 - `OPF_OUTPUT_MODE`: OpenAI Privacy Filter output mode, default `typed`
 - `OPF_CHECKPOINT`: optional custom checkpoint path
 
@@ -137,39 +139,6 @@ Example `.env`:
 PORT=8080
 OPF_DEVICE=cpu
 OPF_OUTPUT_MODE=typed
-```
-
-## Publish Docker Image with GitHub Actions
-
-This repo includes a workflow at [`.github/workflows/publish.yml`](./.github/workflows/publish.yml).
-
-It publishes the container image to GitHub Container Registry:
-
-```text
-ghcr.io/leokwsw/openai-privacy-filter
-```
-
-Triggers:
-
-- Push to `main`
-- Push a version tag like `v1.0.0`
-- Manual workflow dispatch
-
-Make sure GitHub Actions has permission to write packages for the repository.
-
-## Project Structure
-
-```text
-.
-├── .github/workflows/publish.yml
-├── compose.yaml
-├── Dockerfile
-├── main.py
-├── requirements.txt
-├── src/
-│   ├── app.py
-│   └── model/response.py
-└── privacy-filter/
 ```
 
 ## Positioning

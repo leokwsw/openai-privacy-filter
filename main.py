@@ -1,16 +1,23 @@
-# This is a sample Python script.
+import os
+import sys
 
-# Press ⌃R to execute it or replace it with your code.
-# Press Double ⇧ to search everywhere for classes, files, tool windows, actions, and settings.
+from dotenv import load_dotenv
 
+load_dotenv(
+    verbose=True,
+    override=True,
+)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+HOST = os.getenv("HOST")
+PORT = os.getenv("PORT")
 
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press ⌘F8 to toggle the breakpoint.
-
-
-# Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    print_hi('PyCharm')
+    import uvicorn
 
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+    uvicorn.run(
+        "src.app:app",
+        host="127.0.0.1",
+        port=int(PORT) if PORT is not None and PORT != "" else 8080,
+        reload=True,
+        access_log=True,
+    )

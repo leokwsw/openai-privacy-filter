@@ -1,0 +1,12 @@
+# for OpenAI Privacy Filter
+huggingface_hub
+numpy
+packaging
+torch
+safetensors
+tiktoken
+# for RESTful API
+fastapi
+uvicorn[standard]
+pydantic
+python-dotenv

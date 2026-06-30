@@ -1,6 +1,6 @@
 # OpenAI Privacy Filter API
 
-English | [简体中文](./README.zh-CN.md)
+English | [繁體中文](./README.zh-TW.md)
 
 FastAPI wrapper for [OpenAI Privacy Filter](https://github.com/openai/privacy-filter), with Docker, Docker Compose, and GitHub Container Registry publishing support.
 

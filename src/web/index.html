@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OpenAI Privacy Filter</title>
+  <meta name="description" content="Detect and redact personal identifiers (PII) with OpenAI Privacy Filter." />
+  <style>
+    :root {
+      --bg: #0b0d12;
+      --panel: #151821;
+      --panel-2: #1c2030;
+      --border: #2a2f3e;
+      --text: #e8eaf0;
+      --muted: #9aa3b2;
+      --accent: #ff7a00;
+      --accent-hover: #ff9333;
+      --radius: 14px;
+      --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: radial-gradient(1200px 600px at 80% -10%, #1a1f2e 0%, var(--bg) 60%);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    .wrap {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 40px 20px 80px;
+    }
+
+    header h1 {
+      font-size: 2rem;
+      margin: 0 0 8px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .badge {
+      font-size: 0.7rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      background: var(--accent);
+      color: #1a1205;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-weight: 700;
+    }
+
+    header p {
+      color: var(--muted);
+      margin: 0 0 28px;
+      max-width: 680px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: var(--shadow);
+    }
+
+    label.field-label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 8px;
+      font-size: 0.92rem;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 150px;
+      resize: vertical;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      padding: 14px;
+      font-size: 0.98rem;
+      font-family: inherit;
+    }
+
+    textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(255, 122, 0, 0.18);
+    }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--text);
+      padding: 11px 20px;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      transition: all 0.15s ease;
+    }
+
+    button:hover { border-color: var(--accent); }
+    button:disabled { opacity: 0.55; cursor: progress; }
+
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #1a1205;
+    }
+    button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+    .section-title {
+      font-weight: 600;
+      font-size: 0.92rem;
+      margin: 0 0 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .latency {
+      color: var(--muted);
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+
+    .output-box {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      min-height: 60px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .placeholder { color: var(--muted); font-style: italic; }
+
+    mark {
+      border-radius: 5px;
+      padding: 1px 4px;
+      color: #11141c;
+      font-weight: 600;
+      position: relative;
+    }
+
+    mark .tag {
+      font-size: 0.62rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      opacity: 0.8;
+      margin-left: 4px;
+      font-weight: 700;
+    }
+
+    .copy-btn {
+      padding: 5px 12px;
+      font-size: 0.8rem;
+    }
+
+    .summary-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .summary-list li {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 5px 12px;
+      font-size: 0.84rem;
+    }
+
+    .swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .examples {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .example-chip {
+      font-size: 0.85rem;
+      text-align: left;
+      max-width: 100%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 280px;
+    }
+
+    details {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 20px;
+    }
+
+    details summary {
+      cursor: pointer;
+      font-weight: 600;
+      list-style: none;
+    }
+    details summary::-webkit-details-marker { display: none; }
+    details[open] summary { margin-bottom: 10px; }
+
+    details ul { color: var(--muted); margin: 0; padding-left: 20px; }
+    details li { margin-bottom: 6px; }
+
+    .error {
+      color: #ff8a8a;
+      background: rgba(255, 80, 80, 0.1);
+      border: 1px solid rgba(255, 80, 80, 0.35);
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    .warning {
+      color: #ffd27a;
+      font-size: 0.85rem;
+      margin-top: 10px;
+    }
+
+    footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.82rem;
+      margin-top: 30px;
+    }
+    footer a { color: var(--accent); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>OpenAI Privacy Filter <span class="badge">Demo</span></h1>
+      <p>
+        Detect and redact personal identifiers using <code>openai/privacy-filter</code>.
+        Paste text below to highlight predicted spans and generate a redacted variant with
+        label placeholders.
+      </p>
+    </header>
+
+    <div class="error" id="error"></div>
+
+    <section class="panel">
+      <label class="field-label" for="input-text">Input text with PII</label>
+      <textarea id="input-text" placeholder="Paste text to detect personal identifiers and generate redacted output..."></textarea>
+      <div class="actions">
+        <button class="primary" id="submit-btn">Detect &amp; Redact</button>
+        <button id="clear-btn">Clear</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title">
+        <span>Detected entities (highlighted)</span>
+        <span class="latency" id="latency"></span>
+      </div>
+      <div class="output-box" id="highlighted"><span class="placeholder">No entities detected yet.</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title">
+        <span>Redacted text output</span>
+        <button class="copy-btn" id="copy-btn">Copy</button>
+      </div>
+      <div class="output-box" id="redacted"><span class="placeholder">Redacted text will appear here.</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title"><span>Detected entities summary</span></div>
+      <ul class="summary-list" id="summary"><li class="placeholder">No entities detected yet.</li></ul>
+    </section>
+
+    <section class="panel">
+      <div class="section-title"><span>Multilingual quick examples</span></div>
+      <div class="examples" id="examples"></div>
+    </section>
+
+    <details>
+      <summary>How to read results</summary>
+      <ul>
+        <li>Detects 8 span categories: person, email, phone, address, date, URL, account number, and secrets.</li>
+        <li>Uses sequence decoding (BIOES + constrained Viterbi) for cleaner boundaries.</li>
+        <li>Best treated as a redaction aid, not a standalone compliance or anonymization guarantee.</li>
+        <li>Official card notes strongest support is English, with limited multilingual robustness.</li>
+      </ul>
+    </details>
+
+    <footer>
+      Powered by
+      <a href="https://huggingface.co/openai/privacy-filter" target="_blank" rel="noopener">openai/privacy-filter</a>
+      · <a href="/docs" target="_blank" rel="noopener">API docs</a>
+    </footer>
+  </div>
+
+  <script>
+    const PALETTE = [
+      "#ff8c61", "#5ad19a", "#6aa6ff", "#ffc24b", "#c08bff",
+      "#4fd1c5", "#d6a05c", "#ff7ad9", "#e0c84b", "#ff6b6b",
+      "#7c8cff", "#a0a8b8",
+    ];
+    const colorCache = new Map();
+    function labelColor(label) {
+      if (!colorCache.has(label)) {
+        colorCache.set(label, PALETTE[colorCache.size % PALETTE.length]);
+      }
+      return colorCache.get(label);
+    }
+
+    const EXAMPLES = [
+      "Alice was born on 1990-01-02 and lives at 1 Main St.",
+      "Email me at alice@example.com or call 415-555-0101.",
+      "Me llamo Laura Gomez y vivo en Calle de Alcala 21, Madrid.",
+      "Mon e-mail est jean.dupont@example.fr et mon telephone est +33 6 12 34 56 78.",
+      "My name is Taro Yamada and my email is taro.yamada@example.jp.",
+    ];
+
+    const els = {
+      input: document.getElementById("input-text"),
+      submit: document.getElementById("submit-btn"),
+      clear: document.getElementById("clear-btn"),
+      copy: document.getElementById("copy-btn"),
+      highlighted: document.getElementById("highlighted"),
+      redacted: document.getElementById("redacted"),
+      summary: document.getElementById("summary"),
+      latency: document.getElementById("latency"),
+      error: document.getElementById("error"),
+      examples: document.getElementById("examples"),
+    };
+
+    function showError(message) {
+      els.error.textContent = message;
+      els.error.style.display = message ? "block" : "none";
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement("div");
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function renderHighlights(text, spans) {
+      if (!text) {
+        els.highlighted.innerHTML = '<span class="placeholder">No entities detected yet.</span>';
+        return;
+      }
+      const sorted = [...spans].sort((a, b) => a.start - b.start);
+      let cursor = 0;
+      let html = "";
+      for (const span of sorted) {
+        if (span.start < cursor || span.start >= span.end) continue;
+        html += escapeHtml(text.slice(cursor, span.start));
+        const color = labelColor(span.label);
+        html += `<mark style="background:${color}">${escapeHtml(text.slice(span.start, span.end))}<span class="tag">${escapeHtml(span.label)}</span></mark>`;
+        cursor = span.end;
+      }
+      html += escapeHtml(text.slice(cursor));
+      els.highlighted.innerHTML = html || '<span class="placeholder">No entities detected.</span>';
+    }
+
+    function renderSummary(spans) {
+      if (!spans || spans.length === 0) {
+        els.summary.innerHTML = '<li class="placeholder">No entities detected.</li>';
+        return;
+      }
+      const counts = {};
+      for (const span of spans) {
+        counts[span.label] = (counts[span.label] || 0) + 1;
+      }
+      const ordered = Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+      els.summary.innerHTML = ordered
+        .map(([label, count]) => `<li><span class="swatch" style="background:${labelColor(label)}"></span><code>${escapeHtml(label)}</code> &times; ${count}</li>`)
+        .join("");
+    }
+
+    async function runRedaction() {
+      const text = els.input.value;
+      showError("");
+      if (!text.trim()) {
+        renderHighlights("", []);
+        els.redacted.innerHTML = '<span class="placeholder">Redacted text will appear here.</span>';
+        renderSummary([]);
+        els.latency.textContent = "";
+        return;
+      }
+
+      els.submit.disabled = true;
+      els.submit.textContent = "Detecting...";
+      try {
+        const resp = await fetch("/redact", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+        if (!resp.ok) {
+          const detail = await resp.json().catch(() => ({}));
+          throw new Error(detail.detail || `Request failed (${resp.status})`);
+        }
+        const data = await resp.json();
+        const spans = data.detected_spans || [];
+        renderHighlights(data.text || text, spans);
+        els.redacted.textContent = data.redacted_text || "";
+        renderSummary(spans);
+        els.latency.textContent = typeof data.latency_ms === "number"
+          ? `${data.latency_ms.toFixed(1)} ms`
+          : "";
+        if (data.warning) {
+          showError(data.warning);
+        }
+      } catch (err) {
+        showError(err.message || "Something went wrong.");
+      } finally {
+        els.submit.disabled = false;
+        els.submit.textContent = "Detect & Redact";
+      }
+    }
+
+    els.submit.addEventListener("click", runRedaction);
+    els.input.addEventListener("keydown", (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") runRedaction();
+    });
+
+    els.clear.addEventListener("click", () => {
+      els.input.value = "";
+      renderHighlights("", []);
+      els.redacted.innerHTML = '<span class="placeholder">Redacted text will appear here.</span>';
+      renderSummary([]);
+      els.latency.textContent = "";
+      showError("");
+      els.input.focus();
+    });
+
+    els.copy.addEventListener("click", async () => {
+      const text = els.redacted.textContent;
+      if (!text || els.redacted.querySelector(".placeholder")) return;
+      try {
+        await navigator.clipboard.writeText(text);
+        els.copy.textContent = "Copied!";
+        setTimeout(() => (els.copy.textContent = "Copy"), 1500);
+      } catch (_) {
+        els.copy.textContent = "Copy failed";
+        setTimeout(() => (els.copy.textContent = "Copy"), 1500);
+      }
+    });
+
+    for (const example of EXAMPLES) {
+      const chip = document.createElement("button");
+      chip.className = "example-chip";
+      chip.title = example;
+      chip.textContent = example;
+      chip.addEventListener("click", () => {
+        els.input.value = example;
+        runRedaction();
+      });
+      els.examples.appendChild(chip);
+    }
+  </script>
+</body>
+</html>

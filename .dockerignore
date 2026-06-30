@@ -2,6 +2,7 @@
 .gitmodules
 .idea
 .venv
+.run
 __pycache__
 .env
 .env.*

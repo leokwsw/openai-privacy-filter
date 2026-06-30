@@ -1,6 +1,6 @@
 # OpenAI Privacy Filter API
 
-English | [简体中文](./README.zh-CN.md)
+English | [繁體中文](./README.zh-TW.md)
 
 FastAPI wrapper for [OpenAI Privacy Filter](https://github.com/openai/privacy-filter), with Docker, Docker Compose, and GitHub Container Registry publishing support.
 
@@ -14,6 +14,7 @@ OpenAI Privacy Filter is a strong local model for detecting and masking sensitiv
 
 - Simple REST API with FastAPI
 - Built-in web interface served from the same app
+- Optional on-device (WebGPU) inference with automatic server fallback
 - Local-first deployment
 - Docker and Docker Compose support
 - GitHub Actions workflow to publish container images
@@ -32,7 +33,9 @@ If you want to run OpenAI Privacy Filter as a backend service instead of calling
 ## Features
 
 - `GET /` interactive web interface (highlighted entities, redacted output, summary)
+- `GET /webgpu` on-device (WebGPU) web interface with automatic server fallback
 - `GET /health` health check
+- `GET /config` client-inference configuration for the WebGPU page
 - `POST /redact` full redaction response for a single text (spans + summary)
 - `POST /redact/text` text-only redaction response
 - `POST /redact/batch` batch redaction response with detected spans and latency
@@ -54,6 +57,62 @@ The page provides:
 
 The interface is a static single page (`src/web/index.html`) that calls the
 `POST /redact` endpoint, so it works anywhere the API runs.
+
+## On-device WebGPU Version
+
+There are two front-ends:
+
+| Page | URL | Where the model runs |
+| --- | --- | --- |
+| Server version | `/` | Always on the server (`openai/privacy-filter`) |
+| WebGPU version | `/webgpu` | On your device via WebGPU, with automatic server fallback |
+
+Open <http://127.0.0.1:8080/webgpu> to use the on-device variant. It has three modes:
+
+- **Auto** (default): runs in the browser with WebGPU **if** the browser supports
+  it *and* the device looks capable; otherwise it uses the server model. A
+  software/fallback WebGPU adapter scores `0`, so weak machines automatically use
+  the server even when WebGPU is technically "supported".
+- **On-device (WebGPU)**: forces in-browser inference — text never leaves the
+  machine. The first run downloads the model (cached afterward). If on-device
+  processing isn't available (no WebGPU / disabled) or fails, your text is **not**
+  sent anywhere; you're prompted and can *explicitly* choose to use the server.
+- **Server**: always uses the higher-fidelity backend model.
+
+> **Privacy note:** automatic, silent server fallback happens **only in Auto
+> mode**. In On-device mode the app never uploads your text without an explicit
+> click.
+
+On-device detection combines an in-browser NER model (names & locations, run with
+WebGPU via [transformers.js](https://github.com/huggingface/transformers.js)) with
+local regex detectors for structured PII (email, phone, URL, date, account
+numbers, secrets). It is an approximation of the server model and may differ from
+its results.
+
+How the engine is chosen and falls back:
+
+```mermaid
+flowchart TD
+    A[Submit text] --> B{Mode}
+    B -->|Server| S[Server /redact]
+    B -->|On-device| C{WebGPU supported?}
+    B -->|Auto| D{WebGPU supported<br/>and score >= min?}
+    C -->|yes| E[Run in browser]
+    C -->|no| K[Ask for consent first]
+    D -->|yes| E
+    D -->|no| S
+    E -->|error| K
+    E -->|ok| R[Render result]
+    K -->|user consents| S
+    S --> R
+```
+
+Relevant settings live in `.env` (exposed to the page via `GET /config`):
+
+- `OPF_CLIENT_ENABLE`: set to `false` to force every request to the server
+- `OPF_CLIENT_MODEL`: override the in-browser token-classification model id
+- `OPF_TRANSFORMERS_URL`: override the transformers.js module URL (e.g. self-hosted)
+- `OPF_CLIENT_MIN_SCORE`: device capability score (0-100) required for Auto to run on-device
 
 ## API Overview
 

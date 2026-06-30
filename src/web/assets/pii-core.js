@@ -213,6 +213,14 @@ export const DEFAULT_MIN_SCORE = 50;
 
 // Decide which engine to use. Pure and fully testable.
 //   preference: "auto" | "client" | "server"
+//
+// Returns one of three engines:
+//   "client"  - run in the browser (on-device)
+//   "server"  - run on the backend
+//   "blocked" - on-device was explicitly requested but can't run; the caller
+//               MUST NOT silently send text to the server. Only "auto" mode may
+//               fall back to the server silently; forced on-device requires the
+//               user's explicit consent before anything leaves the device.
 export function chooseEngine({
   preference = "auto",
   webgpuSupported = false,
@@ -220,11 +228,35 @@ export function chooseEngine({
   minScore = DEFAULT_MIN_SCORE,
   clientEnabled = true,
 } = {}) {
-  if (!clientEnabled) {
-    return { engine: "server", reason: "Client inference disabled by config." };
-  }
   if (preference === "server") {
     return { engine: "server", reason: "Server mode selected." };
+  }
+
+  if (preference === "client") {
+    // Forced on-device: never silently fall back to the server.
+    if (!clientEnabled) {
+      return {
+        engine: "blocked",
+        reason:
+          "On-device inference is disabled by server configuration, so nothing was sent anywhere.",
+      };
+    }
+    if (!webgpuSupported) {
+      return {
+        engine: "blocked",
+        reason:
+          "WebGPU is not available in this browser, so on-device inference can't run.",
+      };
+    }
+    return { engine: "client", reason: "On-device (WebGPU) mode selected." };
+  }
+
+  // auto: allowed to fall back to the server silently.
+  if (!clientEnabled) {
+    return {
+      engine: "server",
+      reason: "On-device inference disabled by config; using server.",
+    };
   }
   if (!webgpuSupported) {
     return {
@@ -232,10 +264,6 @@ export function chooseEngine({
       reason: "WebGPU is not supported in this browser; using server.",
     };
   }
-  if (preference === "client") {
-    return { engine: "client", reason: "On-device (WebGPU) mode selected." };
-  }
-  // auto
   if (deviceScore >= minScore) {
     return {
       engine: "client",

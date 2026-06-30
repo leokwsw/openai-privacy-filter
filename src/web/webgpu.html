@@ -86,6 +86,9 @@
     .status.warn { color: var(--yellow); }
     .status.error { color: var(--red); }
     .fallback-note { display: none; color: var(--yellow); font-size: 0.82rem; margin-top: 8px; }
+    .consent { display: none; margin-top: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); }
+    .consent span { color: var(--muted); font-size: 0.86rem; margin-right: 10px; }
+    .consent button { padding: 7px 14px; font-size: 0.85rem; }
 
     details { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 20px; }
     details summary { cursor: pointer; font-weight: 600; list-style: none; }
@@ -128,7 +131,11 @@
         <button id="clear-btn">Clear</button>
       </div>
       <div class="status" id="status"></div>
-      <div class="fallback-note" id="fallback-note">On-device inference was unavailable, so this result came from the server.</div>
+      <div class="fallback-note" id="fallback-note">This result came from the server.</div>
+      <div class="consent" id="consent">
+        <span>On-device processing isn't available. Your text has <strong>not</strong> been sent anywhere.</span>
+        <button id="consent-btn">Process on the server instead</button>
+      </div>
     </section>
 
     <section class="panel">
@@ -160,11 +167,11 @@
     <details>
       <summary>How on-device vs server processing works</summary>
       <ul>
-        <li><strong>Auto</strong>: uses WebGPU on-device if your browser supports it and the device looks capable; otherwise the server model runs.</li>
-        <li><strong>On-device (WebGPU)</strong>: forces in-browser inference. Text never leaves your machine. First run downloads the model (cached afterward).</li>
+        <li><strong>Auto</strong>: uses WebGPU on-device if your browser supports it and the device looks capable; otherwise it automatically uses the server model.</li>
+        <li><strong>On-device (WebGPU)</strong>: forces in-browser inference — text never leaves your machine. If on-device processing isn't available or fails, your text is <strong>not</strong> sent anywhere; you're asked first and can explicitly choose to use the server.</li>
         <li><strong>Server</strong>: always uses the higher-fidelity <code>openai/privacy-filter</code> model on the backend.</li>
         <li>On-device detection is an approximation (browser NER + regex) and may differ from the server model's results.</li>
-        <li>If on-device inference fails for any reason, the request transparently falls back to the server.</li>
+        <li>Automatic, silent server fallback happens only in <strong>Auto</strong> mode.</li>
       </ul>
     </details>
 

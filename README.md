@@ -74,15 +74,20 @@ Open <http://127.0.0.1:8080/webgpu> to use the on-device variant. It has three m
   software/fallback WebGPU adapter scores `0`, so weak machines automatically use
   the server even when WebGPU is technically "supported".
 - **On-device (WebGPU)**: forces in-browser inference — text never leaves the
-  machine. The first run downloads the model (cached afterward).
+  machine. The first run downloads the model (cached afterward). If on-device
+  processing isn't available (no WebGPU / disabled) or fails, your text is **not**
+  sent anywhere; you're prompted and can *explicitly* choose to use the server.
 - **Server**: always uses the higher-fidelity backend model.
+
+> **Privacy note:** automatic, silent server fallback happens **only in Auto
+> mode**. In On-device mode the app never uploads your text without an explicit
+> click.
 
 On-device detection combines an in-browser NER model (names & locations, run with
 WebGPU via [transformers.js](https://github.com/huggingface/transformers.js)) with
 local regex detectors for structured PII (email, phone, URL, date, account
 numbers, secrets). It is an approximation of the server model and may differ from
-its results. If on-device inference fails for any reason, the request transparently
-falls back to the server.
+its results.
 
 How the engine is chosen and falls back:
 
@@ -93,11 +98,12 @@ flowchart TD
     B -->|On-device| C{WebGPU supported?}
     B -->|Auto| D{WebGPU supported<br/>and score >= min?}
     C -->|yes| E[Run in browser]
-    C -->|no| S
+    C -->|no| K[Ask for consent first]
     D -->|yes| E
     D -->|no| S
-    E -->|error| S
+    E -->|error| K
     E -->|ok| R[Render result]
+    K -->|user consents| S
     S --> R
 ```
 

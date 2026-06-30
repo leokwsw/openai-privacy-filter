@@ -46,6 +46,10 @@ let capability = { supported: false, score: 0, reason: "Probing..." };
 let clientEngine = null;
 const serverEngine = createServerEngine();
 
+// Text awaiting explicit user consent before it may be sent to the server
+// (set only when forced On-device mode cannot run locally).
+let pendingServerText = null;
+
 function escapeHtml(text) {
   const div = document.createElement("div");
   div.textContent = text;
@@ -134,9 +138,31 @@ function ensureClientEngine() {
   return clientEngine;
 }
 
+function hideConsent() {
+  pendingServerText = null;
+  els.consent.style.display = "none";
+}
+
+// Offer the user an explicit choice to send text to the server. Used only when
+// forced On-device mode cannot run locally; nothing is sent until they click.
+function offerServerConsent(text, message) {
+  pendingServerText = text;
+  setStatus(`${message} Nothing has been sent anywhere.`, "warn");
+  els.consent.style.display = "block";
+}
+
+async function runOnServer(text, { fellBack } = {}) {
+  const result = await serverEngine.run(text);
+  renderResult(result);
+  setEngineBadge("server", "server", result.latency_ms, Boolean(fellBack));
+  if (result.warning) setStatus(result.warning, "warn");
+  return result;
+}
+
 async function run() {
   const text = els.input.value;
   setStatus("", "");
+  hideConsent();
   if (!text.trim()) {
     renderHighlights("", []);
     els.redacted.innerHTML =
@@ -156,47 +182,72 @@ async function run() {
     clientEnabled: config.clientEnabled,
   });
 
+  // Forced On-device mode that cannot run locally: never auto-upload. Ask first.
+  if (decision.engine === "blocked") {
+    offerServerConsent(text, decision.reason);
+    return;
+  }
+
   els.submit.disabled = true;
   els.submit.textContent = "Detecting...";
-  let fellBack = false;
 
   try {
     if (decision.engine === "client") {
-      try {
-        const engine = ensureClientEngine();
-        setStatus("Loading on-device model (first run downloads weights)...", "info");
-        await engine.warmup((p) => {
-          if (p && p.status === "progress" && typeof p.progress === "number") {
-            setStatus(
-              `Downloading model: ${(p.file || "").split("/").pop()} ${p.progress.toFixed(0)}%`,
-              "info"
-            );
-          }
-        });
-        setStatus("Running on-device inference...", "info");
-        const result = await engine.run(text);
-        renderResult(result);
-        setEngineBadge("client", result.backend, result.latency_ms, false);
-        setStatus(decision.reason, "ok");
-        return;
-      } catch (err) {
-        fellBack = true;
-        setStatus(
-          `On-device inference failed (${err && err.message ? err.message : err}); falling back to server.`,
-          "warn"
-        );
-      }
+      const engine = ensureClientEngine();
+      setStatus("Loading on-device model (first run downloads weights)...", "info");
+      await engine.warmup((p) => {
+        if (p && p.status === "progress" && typeof p.progress === "number") {
+          setStatus(
+            `Downloading model: ${(p.file || "").split("/").pop()} ${p.progress.toFixed(0)}%`,
+            "info"
+          );
+        }
+      });
+      setStatus("Running on-device inference...", "info");
+      const result = await engine.run(text);
+      renderResult(result);
+      setEngineBadge("client", result.backend, result.latency_ms, false);
+      setStatus(decision.reason, "ok");
+      return;
     }
 
-    // Server path (chosen directly, or fallback).
-    const result = await serverEngine.run(text);
-    renderResult(result);
-    setEngineBadge("server", "server", result.latency_ms, fellBack);
-    if (!fellBack) setStatus(decision.reason, "ok");
-    if (result.warning) setStatus(result.warning, "warn");
+    // Server engine. This is reached for explicit Server mode and for Auto mode
+    // fallback only (Auto is permitted to use the server automatically).
+    const fellBack = preference === "auto";
+    await runOnServer(text, { fellBack });
+    setStatus(decision.reason, fellBack ? "warn" : "ok");
+  } catch (err) {
+    if (decision.engine === "client") {
+      // Forced On-device failed at runtime: do NOT silently upload. Ask first.
+      offerServerConsent(
+        text,
+        `On-device inference failed (${err && err.message ? err.message : err}).`
+      );
+    } else {
+      setStatus(
+        `Request failed: ${err && err.message ? err.message : err}`,
+        "error"
+      );
+    }
+  } finally {
+    els.submit.disabled = false;
+    els.submit.textContent = "Detect & Redact";
+  }
+}
+
+async function onConsentToServer() {
+  if (pendingServerText == null) return;
+  const text = pendingServerText;
+  hideConsent();
+  els.submit.disabled = true;
+  els.submit.textContent = "Detecting...";
+  setStatus("Processing on the server with your consent...", "info");
+  try {
+    await runOnServer(text, { fellBack: true });
+    setStatus("Processed on the server with your consent.", "ok");
   } catch (err) {
     setStatus(
-      `Request failed: ${err && err.message ? err.message : err}`,
+      `Server request failed: ${err && err.message ? err.message : err}`,
       "error"
     );
   } finally {
@@ -213,6 +264,7 @@ function clearAll() {
   renderSummary([]);
   els.engineBadge.textContent = "";
   els.fallbackNote.style.display = "none";
+  hideConsent();
   setStatus("", "");
   els.input.focus();
 }
@@ -260,15 +312,26 @@ async function init() {
   els.status = $("status");
   els.engineBadge = $("engine-badge");
   els.fallbackNote = $("fallback-note");
+  els.consent = $("consent");
+  els.consentBtn = $("consent-btn");
   els.capability = $("capability");
   els.examples = $("examples");
 
   els.submit.addEventListener("click", run);
   els.clear.addEventListener("click", clearAll);
   els.copy.addEventListener("click", copyRedacted);
+  els.consentBtn.addEventListener("click", onConsentToServer);
   els.input.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") run();
   });
+
+  // Re-running after a mode change should drop any pending consent prompt.
+  for (const radio of document.querySelectorAll('input[name="mode"]')) {
+    radio.addEventListener("change", () => {
+      hideConsent();
+      setStatus("", "");
+    });
+  }
 
   for (const example of EXAMPLES) {
     const chip = document.createElement("button");

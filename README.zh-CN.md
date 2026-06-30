@@ -48,7 +48,7 @@ OpenAI Privacy Filter 本身已经提供了很强的本地隐私过滤能力，�
 - 通过环境变量配置模型设备和 checkpoint
 - 支持 Docker 镜像构建
 - 支持 Docker Compose 本地启动
-- 提供 `setup.sh` / `run.sh` / `stop.sh` 生命周期脚本
+- 通过 `setup.sh` / `run.sh` / `stop.sh` 与 `ecosystem.config.js` 实现 pm2 部署管理
 
 ## 网页界面
 
@@ -142,19 +142,33 @@ OpenAI Privacy Filter 本身已经提供了很强的本地隐私过滤能力，�
 
 ## 快速开始
 
-### 0. 生命周期脚本（推荐）
+### 0. 使用 pm2 的生命周期脚本（推荐）
 
-仓库提供了三个脚本，封装了环境准备和进程管理：
+仓库提供了三个脚本，封装了环境准备和进程管理。部署由
+[pm2](https://pm2.keymetrics.io/) 管理：自动重启保活、集中日志、可设置开机自启。
 
 ```bash
-./setup.sh   # 创建 .venv，安装 torch + privacy-filter + API 依赖，并生成 .env
-./run.sh     # 在后台启动网页界面 + API
-./stop.sh    # 停止后台服务
+./setup.sh   # 创建 .venv，安装 torch + privacy-filter + API 依赖 + pm2，并生成 .env
+./run.sh     # 通过 pm2 启动（或重载）网页界面 + API
+./stop.sh    # 停止并从 pm2 移除该进程
 ```
 
-`run.sh` 默认在后台运行，并把 PID/日志写入 `.run/` 目录。加上 `--foreground`
-（或 `-f`）则改为前台运行。Host 和端口从 `.env` 读取（`HOST`、`PORT`），默认
-为 `0.0.0.0:8080`。
+- `setup.sh` 会用 npm 全局安装 pm2（设置 `SKIP_PM2=1` 可跳过；需要 Node.js）。
+  如果无法全局安装，`run.sh`/`stop.sh` 会回退到 `npx pm2`。
+- `run.sh` 使用 `ecosystem.config.js` 与 `pm2 startOrReload`，因此重复执行会进行
+  零停机重载。加上 `--foreground`（或 `-f`）则绕过 pm2，直接前台运行 uvicorn（便于调试）。
+- `stop.sh` 会删除 pm2 进程；加上 `--keep`（或 `-k`）则仅停止，方便之后用
+  `pm2 restart openai-privacy-filter` 再次启动。
+- Host 和端口从 `.env` 读取（`HOST`、`PORT`），默认为 `0.0.0.0:8080`。
+
+常用 pm2 命令：
+
+```bash
+pm2 status                       # 查看进程列表
+pm2 logs openai-privacy-filter   # 查看日志
+pm2 restart openai-privacy-filter
+pm2 startup && pm2 save          # 设置开机自启
+```
 
 启动后，访问 <http://127.0.0.1:8080/> 打开网页界面，或访问
 <http://127.0.0.1:8080/docs> 查看 API 文档。

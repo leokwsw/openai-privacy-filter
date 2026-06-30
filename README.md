@@ -38,7 +38,7 @@ If you want to run OpenAI Privacy Filter as a backend service instead of calling
 - `POST /redact/batch` batch redaction response with detected spans and latency
 - Configurable model device and checkpoint through environment variables
 - Docker image build and Compose-based local startup
-- `setup.sh` / `run.sh` / `stop.sh` lifecycle scripts
+- pm2-managed deployment via `setup.sh` / `run.sh` / `stop.sh` and `ecosystem.config.js`
 
 ## Web Interface
 
@@ -133,19 +133,36 @@ Returns per-item redaction results, detected spans, summary metadata, and total 
 
 ## Quick Start
 
-### 0. Lifecycle Scripts (recommended)
+### 0. Lifecycle Scripts with pm2 (recommended)
 
-The repo ships three scripts that wrap setup and process management:
+The repo ships three scripts that wrap setup and process management. Deployment
+is managed by [pm2](https://pm2.keymetrics.io/), which keeps the service alive
+(auto-restart), centralizes logs, and can resurrect it on reboot.
 
 ```bash
-./setup.sh   # create .venv, install torch + privacy-filter + API deps, create .env
-./run.sh     # start the web interface + API in the background
-./stop.sh    # stop the background service
+./setup.sh   # create .venv, install torch + privacy-filter + API deps + pm2, create .env
+./run.sh     # start (or reload) the web interface + API under pm2
+./stop.sh    # stop and remove the pm2 process
 ```
 
-`run.sh` defaults to the background and writes its PID/logs to `.run/`. Pass
-`--foreground` (or `-f`) to run it in the foreground instead. Host and port are
-read from `.env` (`HOST`, `PORT`), defaulting to `0.0.0.0:8080`.
+- `setup.sh` installs pm2 globally via npm (set `SKIP_PM2=1` to skip; requires
+  Node.js). If a global install isn't possible, `run.sh`/`stop.sh` fall back to
+  `npx pm2`.
+- `run.sh` uses `ecosystem.config.js` and `pm2 startOrReload`, so re-running it
+  performs a zero-downtime reload. Pass `--foreground` (or `-f`) to bypass pm2
+  and run uvicorn directly in the foreground (useful for debugging).
+- `stop.sh` deletes the pm2 process; pass `--keep` (or `-k`) to only stop it so
+  `pm2 restart openai-privacy-filter` works later.
+- Host and port are read from `.env` (`HOST`, `PORT`), defaulting to `0.0.0.0:8080`.
+
+Useful pm2 commands:
+
+```bash
+pm2 status                       # list processes
+pm2 logs openai-privacy-filter   # tail logs
+pm2 restart openai-privacy-filter
+pm2 startup && pm2 save          # enable start-on-boot
+```
 
 Once running, open <http://127.0.0.1:8080/> for the web UI or
 <http://127.0.0.1:8080/docs> for the API docs.

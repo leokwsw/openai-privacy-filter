@@ -60,5 +60,22 @@ if [ ! -f .env ]; then
   cp .env.sample .env
 fi
 
+# pm2 is used by run.sh / stop.sh to manage the service. Install it globally if
+# it (and a usable npx fallback) is missing. Set SKIP_PM2=1 to skip this step.
+if [ "${SKIP_PM2:-0}" != "1" ]; then
+  if command -v pm2 >/dev/null 2>&1; then
+    echo "==> pm2 already installed ($(pm2 --version))"
+  elif command -v npm >/dev/null 2>&1; then
+    echo "==> Installing pm2 globally via npm"
+    if npm install -g pm2; then
+      echo "==> pm2 installed"
+    else
+      echo "WARNING: global pm2 install failed; run.sh will fall back to 'npx pm2'." >&2
+    fi
+  else
+    echo "WARNING: npm not found; install Node.js + pm2 to use run.sh/stop.sh." >&2
+  fi
+fi
+
 echo ""
 echo "Setup complete. Start the service with: ./run.sh"

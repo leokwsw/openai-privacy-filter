@@ -193,42 +193,49 @@ async function run() {
 
   try {
     if (decision.engine === "client") {
-      const engine = ensureClientEngine();
-      setStatus("Loading on-device model (first run downloads weights)...", "info");
-      await engine.warmup((p) => {
-        if (p && p.status === "progress" && typeof p.progress === "number") {
-          setStatus(
-            `Downloading model: ${(p.file || "").split("/").pop()} ${p.progress.toFixed(0)}%`,
-            "info"
+      try {
+        const engine = ensureClientEngine();
+        setStatus("Loading on-device model (first run downloads weights)...", "info");
+        await engine.warmup((p) => {
+          if (p && p.status === "progress" && typeof p.progress === "number") {
+            setStatus(
+              `Downloading model: ${(p.file || "").split("/").pop()} ${p.progress.toFixed(0)}%`,
+              "info"
+            );
+          }
+        });
+        setStatus("Running on-device inference...", "info");
+        const result = await engine.run(text);
+        renderResult(result);
+        setEngineBadge("client", result.backend, result.latency_ms, false);
+        setStatus(decision.reason, "ok");
+        return;
+      } catch (err) {
+        if (preference === "client") {
+          // Forced On-device failed at runtime: do NOT silently upload. Ask first.
+          offerServerConsent(
+            text,
+            `On-device inference failed (${err && err.message ? err.message : err}).`
           );
+          return;
         }
-      });
-      setStatus("Running on-device inference...", "info");
-      const result = await engine.run(text);
-      renderResult(result);
-      setEngineBadge("client", result.backend, result.latency_ms, false);
-      setStatus(decision.reason, "ok");
-      return;
+        // Auto mode is permitted to fall back to the server automatically.
+        setStatus(
+          `On-device inference failed (${err && err.message ? err.message : err}); falling back to server.`,
+          "warn"
+        );
+        await runOnServer(text, { fellBack: true });
+        return;
+      }
     }
 
-    // Server engine. This is reached for explicit Server mode and for Auto mode
-    // fallback only (Auto is permitted to use the server automatically).
+    // Server engine. Reached for explicit Server mode and for Auto-mode
+    // decisions that resolved to the server up front.
     const fellBack = preference === "auto";
     await runOnServer(text, { fellBack });
     setStatus(decision.reason, fellBack ? "warn" : "ok");
   } catch (err) {
-    if (decision.engine === "client") {
-      // Forced On-device failed at runtime: do NOT silently upload. Ask first.
-      offerServerConsent(
-        text,
-        `On-device inference failed (${err && err.message ? err.message : err}).`
-      );
-    } else {
-      setStatus(
-        `Request failed: ${err && err.message ? err.message : err}`,
-        "error"
-      );
-    }
+    setStatus(`Request failed: ${err && err.message ? err.message : err}`, "error");
   } finally {
     els.submit.disabled = false;
     els.submit.textContent = "Detect & Redact";

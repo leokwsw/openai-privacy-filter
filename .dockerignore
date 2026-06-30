@@ -2,6 +2,9 @@
 .gitmodules
 .idea
 .venv
+.run
+node_modules
+.pm2
 __pycache__
 .env
 .env.*

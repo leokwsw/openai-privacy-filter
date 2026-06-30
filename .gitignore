@@ -3,3 +3,6 @@
 .env*
 !.env.sample
 __pycache__
+.run
+node_modules
+.pm2

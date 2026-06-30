@@ -2,9 +2,12 @@ import logging
 import os
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any, AsyncGenerator
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from opf._api import OPF, RedactionResult
 from src.model.response import (
@@ -20,6 +23,8 @@ from src.model.response import (
 logger = logging.getLogger("opf-server")
 
 MODEL_NOT_LOADED_DETAIL = "Model not loaded"
+
+WEB_DIR = Path(__file__).resolve().parent / "web"
 
 _redactor: OPF | None = None
 
@@ -116,6 +121,12 @@ def health() -> HealthResponse:
     return HealthResponse(status="ok", model_loaded=_redactor is not None)
 
 
+@app.post("/redact", response_model=RedactResponse)
+def redact(request: RedactRequest) -> RedactResponse:
+    result, latency_ms = _measure_redaction(request.text)
+    return _build_response(request.text, result, latency_ms)
+
+
 @app.post("/redact/text", response_model=RedactTextOnlyResponse)
 def redact_text(request: RedactRequest) -> RedactTextOnlyResponse:
     result, latency_ms = _measure_redaction(request.text)
@@ -140,3 +151,12 @@ def redact_batch(request: RedactBatchRequest) -> RedactBatchResponse:
         results=results,
         total_latency_ms=total_latency_ms,
     )
+
+
+@app.get("/", include_in_schema=False)
+def index() -> FileResponse:
+    return FileResponse(WEB_DIR / "index.html")
+
+
+if WEB_DIR.is_dir():
+    app.mount("/web", StaticFiles(directory=WEB_DIR, html=True), name="web")

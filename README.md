@@ -4,13 +4,16 @@ English | [简体中文](./README.zh-CN.md)
 
 FastAPI wrapper for [OpenAI Privacy Filter](https://github.com/openai/privacy-filter), with Docker, Docker Compose, and GitHub Container Registry publishing support.
 
-This project helps you turn OpenAI Privacy Filter into a small self-hosted API service for PII detection and text redaction.
+This project helps you turn OpenAI Privacy Filter into a small self-hosted API service **and a browser-based web interface** for PII detection and text redaction.
+
+The web interface mirrors the official [openai/privacy-filter Hugging Face Space](https://huggingface.co/spaces/openai/privacy-filter): paste text, detect and highlight personal identifiers, and get a redacted output with label placeholders.
 
 ## Why This Project
 
 OpenAI Privacy Filter is a strong local model for detecting and masking sensitive text such as names, emails, phone numbers, dates, addresses, account numbers, private URLs, and secrets. The upstream repo ships a Python package and CLI. This repo adds the missing deployment layer many teams want:
 
 - Simple REST API with FastAPI
+- Built-in web interface served from the same app
 - Local-first deployment
 - Docker and Docker Compose support
 - GitHub Actions workflow to publish container images
@@ -28,17 +31,71 @@ If you want to run OpenAI Privacy Filter as a backend service instead of calling
 
 ## Features
 
+- `GET /` interactive web interface (highlighted entities, redacted output, summary)
 - `GET /health` health check
+- `POST /redact` full redaction response for a single text (spans + summary)
 - `POST /redact/text` text-only redaction response
 - `POST /redact/batch` batch redaction response with detected spans and latency
 - Configurable model device and checkpoint through environment variables
 - Docker image build and Compose-based local startup
+- pm2-managed deployment via `setup.sh` / `run.sh` / `stop.sh` and `ecosystem.config.js`
+
+## Web Interface
+
+After starting the service, open <http://127.0.0.1:8080/> in your browser.
+
+The page provides:
+
+- A text input for content that may contain PII
+- A "Detect & Redact" action that highlights detected entities
+- A redacted text output with a copy button
+- A per-label summary of detected entities
+- Multilingual quick examples
+
+The interface is a static single page (`src/web/index.html`) that calls the
+`POST /redact` endpoint, so it works anywhere the API runs.
 
 ## API Overview
 
 ### `GET /health`
 
 Returns service status and whether the model is loaded.
+
+### `POST /redact`
+
+Returns the full redaction result for a single text, including the original
+text, redacted text, detected spans, and a summary. This is the endpoint used
+by the web interface.
+
+Request:
+
+```json
+{
+  "text": "Email me at alice@example.com"
+}
+```
+
+Response:
+
+```json
+{
+  "schema_version": 0,
+  "text": "Email me at alice@example.com",
+  "redacted_text": "Email me at [EMAIL]",
+  "detected_spans": [
+    {
+      "label": "private_email",
+      "start": 12,
+      "end": 29,
+      "text": "alice@example.com",
+      "placeholder": "[EMAIL]"
+    }
+  ],
+  "summary": { "output_mode": "typed", "span_count": 1, "by_label": { "private_email": 1 }, "decoded_mismatch": false },
+  "warning": null,
+  "latency_ms": 123.45
+}
+```
 
 ### `POST /redact/text`
 
@@ -76,6 +133,40 @@ Returns per-item redaction results, detected spans, summary metadata, and total 
 
 ## Quick Start
 
+### 0. Lifecycle Scripts with pm2 (recommended)
+
+The repo ships three scripts that wrap setup and process management. Deployment
+is managed by [pm2](https://pm2.keymetrics.io/), which keeps the service alive
+(auto-restart), centralizes logs, and can resurrect it on reboot.
+
+```bash
+./setup.sh   # create .venv, install torch + privacy-filter + API deps + pm2, create .env
+./run.sh     # start (or reload) the web interface + API under pm2
+./stop.sh    # stop and remove the pm2 process
+```
+
+- `setup.sh` installs pm2 globally via npm (set `SKIP_PM2=1` to skip; requires
+  Node.js). If a global install isn't possible, `run.sh`/`stop.sh` fall back to
+  `npx pm2`.
+- `run.sh` uses `ecosystem.config.js` and `pm2 startOrReload`, so re-running it
+  performs a zero-downtime reload. Pass `--foreground` (or `-f`) to bypass pm2
+  and run uvicorn directly in the foreground (useful for debugging).
+- `stop.sh` deletes the pm2 process; pass `--keep` (or `-k`) to only stop it so
+  `pm2 restart openai-privacy-filter` works later.
+- Host and port are read from `.env` (`HOST`, `PORT`), defaulting to `0.0.0.0:8080`.
+
+Useful pm2 commands:
+
+```bash
+pm2 status                       # list processes
+pm2 logs openai-privacy-filter   # tail logs
+pm2 restart openai-privacy-filter
+pm2 startup && pm2 save          # enable start-on-boot
+```
+
+Once running, open <http://127.0.0.1:8080/> for the web UI or
+<http://127.0.0.1:8080/docs> for the API docs.
+
 ### 1. Local Python Run
 
 ```bash
@@ -86,7 +177,7 @@ pip install ./privacy-filter
 python main.py
 ```
 
-The API starts on `http://127.0.0.1:8080`.
+The API and web interface start on `http://127.0.0.1:8080`.
 
 ### 2. Docker
 

@@ -25,6 +25,7 @@ OpenAI Privacy Filter 本身已经提供了很强的本地隐私过滤能力，�
 
 - 基于 FastAPI 的 REST API
 - 内置网页界面，与 API 同一个服务一起提供
+- 可选的设备端（WebGPU）推理，并自动回退到服务端
 - 支持本地和私有化部署
 - 支持 Docker 与 Docker Compose
 - 支持 GitHub Actions 自动发布镜像
@@ -41,7 +42,9 @@ OpenAI Privacy Filter 本身已经提供了很强的本地隐私过滤能力，�
 ## 功能
 
 - `GET /` 交互式网页界面（高亮实体、脱敏结果、摘要）
+- `GET /webgpu` 设备端（WebGPU）网页界面，支持自动回退到服务端
 - `GET /health` 服务健康检查
+- `GET /config` WebGPU 页面使用的客户端推理配置
 - `POST /redact` 返回单条文本的完整脱敏结果（含 span 和摘要）
 - `POST /redact/text` 返回纯文本脱敏结果
 - `POST /redact/batch` 批量脱敏，并返回 span、摘要和耗时
@@ -64,6 +67,53 @@ OpenAI Privacy Filter 本身已经提供了很强的本地隐私过滤能力，�
 
 该界面是一个静态单页面（`src/web/index.html`），通过调用 `POST /redact`
 接口工作，因此只要 API 在运行就能使用。
+
+## 设备端 WebGPU 版本
+
+项目提供了两个前端：
+
+| 页面 | 地址 | 模型运行位置 |
+| --- | --- | --- |
+| 服务端版本 | `/` | 始终在服务端运行（`openai/privacy-filter`） |
+| WebGPU 版本 | `/webgpu` | 在设备端通过 WebGPU 运行，并自动回退到服务端 |
+
+打开 <http://127.0.0.1:8080/webgpu> 使用设备端版本，共有三种模式：
+
+- **Auto（默认）**：当浏览器支持 WebGPU **且**设备足够强时在浏览器中运行，
+  否则使用服务端模型。软件/回退（fallback）WebGPU 适配器的评分为 `0`，因此即使
+  “支持” WebGPU，性能不足的机器也会自动改用服务端。
+- **On-device（WebGPU）**：强制在浏览器内推理——文本不会离开本机。首次运行会
+  下载模型（之后缓存）。
+- **Server**：始终使用精度更高的后端模型。
+
+设备端检测把一个在浏览器内、用 WebGPU 运行的 NER 模型（人名与地点，基于
+[transformers.js](https://github.com/huggingface/transformers.js)）与本地正则
+检测器（邮箱、电话、URL、日期、账号、密钥）结合起来。它是对服务端模型的近似，
+结果可能与服务端不同。若设备端推理因任何原因失败，请求会透明地回退到服务端。
+
+引擎选择与回退流程：
+
+```mermaid
+flowchart TD
+    A[提交文本] --> B{模式}
+    B -->|Server| S[服务端 /redact]
+    B -->|On-device| C{支持 WebGPU?}
+    B -->|Auto| D{支持 WebGPU<br/>且评分 >= 阈值?}
+    C -->|是| E[在浏览器中运行]
+    C -->|否| S
+    D -->|是| E
+    D -->|否| S
+    E -->|出错| S
+    E -->|成功| R[渲染结果]
+    S --> R
+```
+
+相关配置位于 `.env`（通过 `GET /config` 暴露给页面）：
+
+- `OPF_CLIENT_ENABLE`：设为 `false` 可强制所有请求走服务端
+- `OPF_CLIENT_MODEL`：覆盖浏览器内使用的 token-classification 模型 id
+- `OPF_TRANSFORMERS_URL`：覆盖 transformers.js 模块 URL（例如自托管）
+- `OPF_CLIENT_MIN_SCORE`：Auto 模式在设备端运行所需的设备评分（0-100）
 
 ## API 说明
 

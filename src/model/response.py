@@ -13,6 +13,22 @@ class HealthResponse(APIModel):
     model_loaded: bool = Field(description="Whether the OPF model is ready")
 
 
+class ClientConfigResponse(APIModel):
+    client_enabled: bool = Field(
+        description="Whether on-device (WebGPU) inference is allowed by the server"
+    )
+    client_model: str | None = Field(
+        default=None, description="Optional override model id for in-browser inference"
+    )
+    transformers_url: str | None = Field(
+        default=None, description="Optional override URL for the transformers.js module"
+    )
+    client_min_score: int = Field(
+        default=50,
+        description="Minimum device capability score (0-100) to auto-select on-device inference",
+    )
+
+
 class SpanOut(APIModel):
     label: str = Field(description="Detected entity label")
     start: int = Field(description="Inclusive start offset in the original text")

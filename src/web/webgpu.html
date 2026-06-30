@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OpenAI Privacy Filter · WebGPU</title>
+  <meta name="description" content="Detect and redact PII on-device with WebGPU, falling back to the server when unsupported." />
+  <style>
+    :root {
+      --bg: #0b0d12; --panel: #151821; --panel-2: #1c2030; --border: #2a2f3e;
+      --text: #e8eaf0; --muted: #9aa3b2; --accent: #ff7a00; --accent-hover: #ff9333;
+      --green: #5ad19a; --blue: #6aa6ff; --yellow: #ffd27a; --red: #ff8a8a;
+      --radius: 14px; --shadow: 0 10px 30px rgba(0,0,0,0.35);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: "Inter","Segoe UI",system-ui,-apple-system,sans-serif;
+      background: radial-gradient(1200px 600px at 80% -10%, #1a1f2e 0%, var(--bg) 60%);
+      color: var(--text); line-height: 1.5; min-height: 100vh;
+    }
+    .wrap { max-width: 920px; margin: 0 auto; padding: 40px 20px 80px; }
+    header h1 { font-size: 2rem; margin: 0 0 8px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .badge {
+      font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase;
+      background: var(--accent); color: #1a1205; padding: 4px 10px; border-radius: 999px; font-weight: 700;
+    }
+    header p { color: var(--muted); margin: 0 0 20px; max-width: 700px; }
+    .nav { margin-bottom: 24px; font-size: 0.9rem; }
+    .nav a { color: var(--accent); text-decoration: none; }
+    .panel {
+      background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 20px; margin-bottom: 20px; box-shadow: var(--shadow);
+    }
+    .field-label { display: block; font-weight: 600; margin-bottom: 8px; font-size: 0.92rem; }
+    textarea {
+      width: 100%; min-height: 140px; resize: vertical; background: var(--panel-2);
+      border: 1px solid var(--border); border-radius: 10px; color: var(--text);
+      padding: 14px; font-size: 0.98rem; font-family: inherit;
+    }
+    textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255,122,0,0.18); }
+    .actions { display: flex; gap: 12px; margin-top: 14px; flex-wrap: wrap; align-items: center; }
+    button {
+      cursor: pointer; border: 1px solid var(--border); background: var(--panel-2); color: var(--text);
+      padding: 11px 20px; border-radius: 10px; font-size: 0.95rem; font-weight: 600; transition: all 0.15s ease;
+    }
+    button:hover { border-color: var(--accent); }
+    button:disabled { opacity: 0.55; cursor: progress; }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #1a1205; }
+    button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+    .mode-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+    .mode-option {
+      display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+      border: 1px solid var(--border); background: var(--panel-2);
+      padding: 8px 14px; border-radius: 10px; font-size: 0.9rem;
+    }
+    .mode-option input { accent-color: var(--accent); }
+    .mode-option:has(input:checked) { border-color: var(--accent); }
+
+    .capability { font-size: 0.85rem; padding: 4px 0; }
+    .capability.ok { color: var(--green); }
+    .capability.muted { color: var(--muted); }
+
+    .section-title { font-weight: 600; font-size: 0.92rem; margin: 0 0 10px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .engine-badge { font-size: 0.78rem; font-weight: 600; padding: 3px 10px; border-radius: 999px; }
+    .engine-badge.on-device { background: rgba(90,209,154,0.16); color: var(--green); }
+    .engine-badge.on-server { background: rgba(106,166,255,0.16); color: var(--blue); }
+
+    .output-box {
+      background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px;
+      padding: 14px; min-height: 60px; white-space: pre-wrap; word-break: break-word;
+    }
+    .placeholder { color: var(--muted); font-style: italic; }
+    mark { border-radius: 5px; padding: 1px 4px; color: #11141c; font-weight: 600; }
+    mark .tag { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.8; margin-left: 4px; font-weight: 700; }
+    .copy-btn { padding: 5px 12px; font-size: 0.8rem; }
+    .summary-list { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+    .summary-list li { display: inline-flex; align-items: center; gap: 8px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; font-size: 0.84rem; }
+    .swatch { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .examples { display: flex; flex-wrap: wrap; gap: 10px; }
+    .example-chip { font-size: 0.85rem; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 280px; }
+
+    .status { font-size: 0.86rem; min-height: 1.2em; margin-top: 12px; }
+    .status.info { color: var(--blue); }
+    .status.ok { color: var(--green); }
+    .status.warn { color: var(--yellow); }
+    .status.error { color: var(--red); }
+    .fallback-note { display: none; color: var(--yellow); font-size: 0.82rem; margin-top: 8px; }
+
+    details { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 20px; }
+    details summary { cursor: pointer; font-weight: 600; list-style: none; }
+    details summary::-webkit-details-marker { display: none; }
+    details[open] summary { margin-bottom: 10px; }
+    details ul { color: var(--muted); margin: 0; padding-left: 20px; }
+    details li { margin-bottom: 6px; }
+
+    footer { text-align: center; color: var(--muted); font-size: 0.82rem; margin-top: 30px; }
+    footer a { color: var(--accent); text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>OpenAI Privacy Filter <span class="badge">WebGPU</span></h1>
+      <p>
+        Runs PII detection <strong>on your device</strong> with WebGPU when supported and capable,
+        and automatically falls back to the server-side <code>openai/privacy-filter</code> model
+        otherwise. On-device detection combines an in-browser NER model (names &amp; locations) with
+        local pattern matching (email, phone, URL, date, account numbers, secrets).
+      </p>
+      <div class="nav"><a href="/">&larr; Server version</a> &nbsp;·&nbsp; <a href="/docs" target="_blank" rel="noopener">API docs</a></div>
+    </header>
+
+    <section class="panel">
+      <div class="mode-row">
+        <label class="mode-option"><input type="radio" name="mode" value="auto" checked /> Auto (recommended)</label>
+        <label class="mode-option"><input type="radio" name="mode" value="client" /> On-device (WebGPU)</label>
+        <label class="mode-option"><input type="radio" name="mode" value="server" /> Server</label>
+      </div>
+      <div class="capability muted" id="capability">Detecting WebGPU capability...</div>
+    </section>
+
+    <section class="panel">
+      <label class="field-label" for="input-text">Input text with PII</label>
+      <textarea id="input-text" placeholder="Paste text to detect personal identifiers and generate redacted output..."></textarea>
+      <div class="actions">
+        <button class="primary" id="submit-btn">Detect &amp; Redact</button>
+        <button id="clear-btn">Clear</button>
+      </div>
+      <div class="status" id="status"></div>
+      <div class="fallback-note" id="fallback-note">On-device inference was unavailable, so this result came from the server.</div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title">
+        <span>Detected entities (highlighted)</span>
+        <span class="engine-badge" id="engine-badge"></span>
+      </div>
+      <div class="output-box" id="highlighted"><span class="placeholder">No entities detected yet.</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title">
+        <span>Redacted text output</span>
+        <button class="copy-btn" id="copy-btn">Copy</button>
+      </div>
+      <div class="output-box" id="redacted"><span class="placeholder">Redacted text will appear here.</span></div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title"><span>Detected entities summary</span></div>
+      <ul class="summary-list" id="summary"><li class="placeholder">No entities detected yet.</li></ul>
+    </section>
+
+    <section class="panel">
+      <div class="section-title"><span>Quick examples</span></div>
+      <div class="examples" id="examples"></div>
+    </section>
+
+    <details>
+      <summary>How on-device vs server processing works</summary>
+      <ul>
+        <li><strong>Auto</strong>: uses WebGPU on-device if your browser supports it and the device looks capable; otherwise the server model runs.</li>
+        <li><strong>On-device (WebGPU)</strong>: forces in-browser inference. Text never leaves your machine. First run downloads the model (cached afterward).</li>
+        <li><strong>Server</strong>: always uses the higher-fidelity <code>openai/privacy-filter</code> model on the backend.</li>
+        <li>On-device detection is an approximation (browser NER + regex) and may differ from the server model's results.</li>
+        <li>If on-device inference fails for any reason, the request transparently falls back to the server.</li>
+      </ul>
+    </details>
+
+    <footer>
+      Powered by
+      <a href="https://huggingface.co/openai/privacy-filter" target="_blank" rel="noopener">openai/privacy-filter</a>
+      and <a href="https://github.com/huggingface/transformers.js" target="_blank" rel="noopener">transformers.js</a>
+    </footer>
+  </div>
+
+  <script type="module" src="/web/assets/app-webgpu.js"></script>
+</body>
+</html>

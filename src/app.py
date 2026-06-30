@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from opf._api import OPF, RedactionResult
 from src.model.response import (
+    ClientConfigResponse,
     HealthResponse,
     RedactBatchRequest,
     RedactBatchResponse,
@@ -116,9 +117,30 @@ def _build_response(source_text: str, result: str | RedactionResult, latency_ms:
     )
 
 
+def _env_flag(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None or raw == "":
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 @app.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
     return HealthResponse(status="ok", model_loaded=_redactor is not None)
+
+
+@app.get("/config", response_model=ClientConfigResponse)
+def client_config() -> ClientConfigResponse:
+    try:
+        min_score = int(os.getenv("OPF_CLIENT_MIN_SCORE", "50"))
+    except ValueError:
+        min_score = 50
+    return ClientConfigResponse(
+        client_enabled=_env_flag("OPF_CLIENT_ENABLE", True),
+        client_model=os.getenv("OPF_CLIENT_MODEL") or None,
+        transformers_url=os.getenv("OPF_TRANSFORMERS_URL") or None,
+        client_min_score=min_score,
+    )
 
 
 @app.post("/redact", response_model=RedactResponse)
@@ -156,6 +178,11 @@ def redact_batch(request: RedactBatchRequest) -> RedactBatchResponse:
 @app.get("/", include_in_schema=False)
 def index() -> FileResponse:
     return FileResponse(WEB_DIR / "index.html")
+
+
+@app.get("/webgpu", include_in_schema=False)
+def webgpu() -> FileResponse:
+    return FileResponse(WEB_DIR / "webgpu.html")
 
 
 if WEB_DIR.is_dir():

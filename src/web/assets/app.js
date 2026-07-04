@@ -1,6 +1,7 @@
-// app-webgpu.js
+// app.js
 //
-// Orchestrates the WebGPU (on-device) version of the Privacy Filter UI:
+// Orchestrates the unified Privacy Filter web interface (served alongside the
+// REST API by the same service):
 //   - Probes WebGPU capability.
 //   - Lets the user pick Auto / On-device / Server.
 //   - Runs the chosen engine, transparently falling back to the server

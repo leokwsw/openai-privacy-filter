@@ -4,17 +4,16 @@ English | [繁體中文](./README.zh-TW.md)
 
 FastAPI wrapper for [OpenAI Privacy Filter](https://github.com/openai/privacy-filter), with Docker, Docker Compose, and GitHub Container Registry publishing support.
 
-This project helps you turn OpenAI Privacy Filter into a small self-hosted API service **and a browser-based web interface** for PII detection and text redaction.
+This project turns OpenAI Privacy Filter into a small self-hosted service that exposes **both a REST API and a browser-based web interface from a single app** for PII detection and text redaction.
 
-The web interface mirrors the official [openai/privacy-filter Hugging Face Space](https://huggingface.co/spaces/openai/privacy-filter): paste text, detect and highlight personal identifiers, and get a redacted output with label placeholders.
+The web interface mirrors the official [openai/privacy-filter Hugging Face Space](https://huggingface.co/spaces/openai/privacy-filter): paste text, detect and highlight personal identifiers, and get a redacted output with label placeholders. A single page lets you choose where each request runs — **on your device with WebGPU, on the server, or Auto** — all backed by the same service and the same API.
 
 ## Why This Project
 
 OpenAI Privacy Filter is a strong local model for detecting and masking sensitive text such as names, emails, phone numbers, dates, addresses, account numbers, private URLs, and secrets. The upstream repo ships a Python package and CLI. This repo adds the missing deployment layer many teams want:
 
-- Simple REST API with FastAPI
-- Built-in web interface served from the same app
-- Optional on-device (WebGPU) inference with automatic server fallback
+- REST API and web interface unified in one FastAPI service
+- Optional on-device (WebGPU) inference with automatic server fallback, from the same page
 - Local-first deployment
 - Docker and Docker Compose support
 - GitHub Actions workflow to publish container images
@@ -32,10 +31,10 @@ If you want to run OpenAI Privacy Filter as a backend service instead of calling
 
 ## Features
 
-- `GET /` interactive web interface (highlighted entities, redacted output, summary)
-- `GET /webgpu` on-device (WebGPU) web interface with automatic server fallback
+- `GET /` unified web interface (Auto / On-device WebGPU / Server modes)
+- `GET /webgpu` backward-compatible redirect to `/`
 - `GET /health` health check
-- `GET /config` client-inference configuration for the WebGPU page
+- `GET /config` on-device inference configuration for the web interface
 - `POST /redact` full redaction response for a single text (spans + summary)
 - `POST /redact/text` text-only redaction response
 - `POST /redact/batch` batch redaction response with detected spans and latency
@@ -45,29 +44,21 @@ If you want to run OpenAI Privacy Filter as a backend service instead of calling
 
 ## Web Interface
 
-After starting the service, open <http://127.0.0.1:8080/> in your browser.
+After starting the service, open <http://127.0.0.1:8080/> in your browser. The
+API and the web interface are the **same service** — no separate process or page.
 
-The page provides:
+The single page provides:
 
+- A **processing mode** selector (Auto / On-device WebGPU / Server)
 - A text input for content that may contain PII
 - A "Detect & Redact" action that highlights detected entities
 - A redacted text output with a copy button
 - A per-label summary of detected entities
 - Multilingual quick examples
 
-The interface is a static single page (`src/web/index.html`) that calls the
-`POST /redact` endpoint, so it works anywhere the API runs.
+> The old `/webgpu` page has been folded into `/` and now redirects there.
 
-## On-device WebGPU Version
-
-There are two front-ends:
-
-| Page | URL | Where the model runs |
-| --- | --- | --- |
-| Server version | `/` | Always on the server (`openai/privacy-filter`) |
-| WebGPU version | `/webgpu` | On your device via WebGPU, with automatic server fallback |
-
-Open <http://127.0.0.1:8080/webgpu> to use the on-device variant. It has three modes:
+The three modes:
 
 - **Auto** (default): runs in the browser with WebGPU **if** the browser supports
   it *and* the device looks capable; otherwise it uses the server model. A
@@ -77,7 +68,8 @@ Open <http://127.0.0.1:8080/webgpu> to use the on-device variant. It has three m
   machine. The first run downloads the model (cached afterward). If on-device
   processing isn't available (no WebGPU / disabled) or fails, your text is **not**
   sent anywhere; you're prompted and can *explicitly* choose to use the server.
-- **Server**: always uses the higher-fidelity backend model.
+- **Server**: always uses the higher-fidelity backend model — the same
+  `openai/privacy-filter` model exposed by the REST API.
 
 > **Privacy note:** automatic, silent server fallback happens **only in Auto
 > mode**. In On-device mode the app never uploads your text without an explicit
@@ -101,7 +93,8 @@ flowchart TD
     C -->|no| K[Ask for consent first]
     D -->|yes| E
     D -->|no| S
-    E -->|error| K
+    E -->|error & forced On-device| K
+    E -->|error & Auto| S
     E -->|ok| R[Render result]
     K -->|user consents| S
     S --> R

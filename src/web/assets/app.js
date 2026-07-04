@@ -233,8 +233,10 @@ async function run() {
     // Server engine. Reached for explicit Server mode and for Auto-mode
     // decisions that resolved to the server up front.
     const fellBack = preference === "auto";
-    await runOnServer(text, { fellBack });
-    setStatus(decision.reason, fellBack ? "warn" : "ok");
+    const result = await runOnServer(text, { fellBack });
+    // Preserve any warning surfaced by runOnServer; only show the decision
+    // reason when the server didn't report a warning.
+    if (!result.warning) setStatus(decision.reason, fellBack ? "warn" : "ok");
   } catch (err) {
     setStatus(`Request failed: ${err && err.message ? err.message : err}`, "error");
   } finally {
@@ -251,8 +253,11 @@ async function onConsentToServer() {
   els.submit.textContent = "Detecting...";
   setStatus("Processing on the server with your consent...", "info");
   try {
-    await runOnServer(text, { fellBack: true });
-    setStatus("Processed on the server with your consent.", "ok");
+    const result = await runOnServer(text, { fellBack: true });
+    // Keep a server warning visible; otherwise confirm the consented run.
+    if (!result.warning) {
+      setStatus("Processed on the server with your consent.", "ok");
+    }
   } catch (err) {
     setStatus(
       `Server request failed: ${err && err.message ? err.message : err}`,

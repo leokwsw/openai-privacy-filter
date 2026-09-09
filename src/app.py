@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, AsyncGenerator
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from opf._api import OPF, RedactionResult
@@ -181,8 +181,9 @@ def index() -> FileResponse:
 
 
 @app.get("/webgpu", include_in_schema=False)
-def webgpu() -> FileResponse:
-    return FileResponse(WEB_DIR / "webgpu.html")
+def webgpu() -> RedirectResponse:
+    # The on-device (WebGPU) experience is now part of the unified interface.
+    return RedirectResponse(url="/", status_code=308)
 
 
 if WEB_DIR.is_dir():

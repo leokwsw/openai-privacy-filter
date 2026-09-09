@@ -1,6 +1,7 @@
-// app-webgpu.js
+// app.js
 //
-// Orchestrates the WebGPU (on-device) version of the Privacy Filter UI:
+// Orchestrates the unified Privacy Filter web interface (served alongside the
+// REST API by the same service):
 //   - Probes WebGPU capability.
 //   - Lets the user pick Auto / On-device / Server.
 //   - Runs the chosen engine, transparently falling back to the server
@@ -45,6 +46,12 @@ let config = {
 let capability = { supported: false, score: 0, reason: "Probing..." };
 let clientEngine = null;
 const serverEngine = createServerEngine();
+
+// Resolves once /config and WebGPU probing have finished. Until then, `capability`
+// still holds its optimistic-but-unknown default, so runs must wait for this to
+// avoid Auto/On-device wrongly routing to the server during probing.
+let readyPromise = null;
+let ready = false;
 
 // Text awaiting explicit user consent before it may be sent to the server
 // (set only when forced On-device mode cannot run locally).
@@ -160,6 +167,9 @@ async function runOnServer(text, { fellBack } = {}) {
 }
 
 async function run() {
+  // Ignore re-entrant submissions (clicks / Ctrl+Enter) while busy or waiting.
+  if (els.submit.disabled) return;
+
   const text = els.input.value;
   setStatus("", "");
   hideConsent();
@@ -171,6 +181,23 @@ async function run() {
     els.engineBadge.textContent = "";
     els.fallbackNote.style.display = "none";
     return;
+  }
+
+  // Wait for /config + WebGPU probing so Auto/On-device decisions are correct
+  // even if the user submits during the "Detecting WebGPU capability..." window.
+  if (!ready && readyPromise) {
+    els.submit.disabled = true;
+    els.submit.textContent = "Detecting...";
+    setStatus("Detecting device capability...", "info");
+    try {
+      await readyPromise;
+    } catch (_) {
+      /* fall through with whatever capability we have */
+    } finally {
+      els.submit.disabled = false;
+      els.submit.textContent = "Detect & Redact";
+    }
+    setStatus("", "");
   }
 
   const preference = getPreference();
@@ -232,8 +259,10 @@ async function run() {
     // Server engine. Reached for explicit Server mode and for Auto-mode
     // decisions that resolved to the server up front.
     const fellBack = preference === "auto";
-    await runOnServer(text, { fellBack });
-    setStatus(decision.reason, fellBack ? "warn" : "ok");
+    const result = await runOnServer(text, { fellBack });
+    // Preserve any warning surfaced by runOnServer; only show the decision
+    // reason when the server didn't report a warning.
+    if (!result.warning) setStatus(decision.reason, fellBack ? "warn" : "ok");
   } catch (err) {
     setStatus(`Request failed: ${err && err.message ? err.message : err}`, "error");
   } finally {
@@ -250,8 +279,11 @@ async function onConsentToServer() {
   els.submit.textContent = "Detecting...";
   setStatus("Processing on the server with your consent...", "info");
   try {
-    await runOnServer(text, { fellBack: true });
-    setStatus("Processed on the server with your consent.", "ok");
+    const result = await runOnServer(text, { fellBack: true });
+    // Keep a server warning visible; otherwise confirm the consented run.
+    if (!result.warning) {
+      setStatus("Processed on the server with your consent.", "ok");
+    }
   } catch (err) {
     setStatus(
       `Server request failed: ${err && err.message ? err.message : err}`,
@@ -352,17 +384,20 @@ async function init() {
     els.examples.appendChild(chip);
   }
 
-  await loadConfig();
-
   els.capability.textContent = "Detecting WebGPU capability...";
-  capability = await probeWebGPU();
-  els.capability.textContent = describeCapability(capability);
-  els.capability.className =
-    "capability " + (capability.supported ? "ok" : "muted");
+  readyPromise = (async () => {
+    await loadConfig();
+    capability = await probeWebGPU();
+    els.capability.textContent = describeCapability(capability);
+    els.capability.className =
+      "capability " + (capability.supported ? "ok" : "muted");
+    if (!config.clientEnabled) {
+      setStatus("On-device inference is disabled by server config.", "warn");
+    }
+    ready = true;
+  })();
 
-  if (!config.clientEnabled) {
-    setStatus("On-device inference is disabled by server config.", "warn");
-  }
+  await readyPromise;
 }
 
 if (document.readyState === "loading") {

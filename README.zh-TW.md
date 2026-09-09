@@ -4,9 +4,9 @@
 
 這是一個基於 [OpenAI Privacy Filter](https://github.com/openai/privacy-filter) 的 FastAPI 封裝專案，內建 Docker、Docker Compose，以及 GitHub Container Registry 發佈工作流程。
 
-如果你想把 OpenAI Privacy Filter 快速部署成一個可呼叫的本地 API 服務**以及一個瀏覽器網頁介面**，而不是只在命令列裡使用，這個專案就是為這個情境準備的。
+這個專案把 OpenAI Privacy Filter 變成一個小型自架服務，並在**同一個應用程式中同時提供 REST API 與瀏覽器網頁介面**，用於 PII 偵測與文字脫敏。
 
-網頁介面參考了官方的 [openai/privacy-filter Hugging Face Space](https://huggingface.co/spaces/openai/privacy-filter)：貼上文字、偵測並高亮個人敏感資訊，並產生帶有佔位符的脫敏結果。
+網頁介面參考了官方的 [openai/privacy-filter Hugging Face Space](https://huggingface.co/spaces/openai/privacy-filter)：貼上文字、偵測並高亮個人敏感資訊，並產生帶有佔位符的脫敏結果。單一頁面即可選擇每個請求在哪裡執行——**在你的裝置上以 WebGPU 執行、在伺服器端執行，或交給 Auto 決定**——全部由同一個服務、同一組 API 支援。
 
 ## 這個專案解決什麼問題
 
@@ -23,9 +23,8 @@ OpenAI Privacy Filter 本身已經提供了很強的本地隱私過濾能力，�
 
 上游儲存庫主要提供模型、Python 套件和 CLI。本專案補上了更適合落地部署的一層：
 
-- 基於 FastAPI 的 REST API
-- 內建網頁介面，與 API 在同一個服務一起提供
-- 可選的裝置端（WebGPU）推理，並自動回退到伺服器端
+- REST API 與網頁介面整合在同一個 FastAPI 服務中
+- 可選的裝置端（WebGPU）推理，並在同一頁面自動回退到伺服器端
 - 支援本地與私有化部署
 - 支援 Docker 與 Docker Compose
 - 支援 GitHub Actions 自動發佈映像
@@ -41,10 +40,10 @@ OpenAI Privacy Filter 本身已經提供了很強的本地隱私過濾能力，�
 
 ## 功能
 
-- `GET /` 互動式網頁介面（高亮實體、脫敏結果、摘要）
-- `GET /webgpu` 裝置端（WebGPU）網頁介面，支援自動回退到伺服器端
+- `GET /` 整合式網頁介面（Auto／裝置端 WebGPU／伺服器端 三種模式）
+- `GET /webgpu` 為相容舊網址而重新導向到 `/`
 - `GET /health` 服務健康檢查
-- `GET /config` WebGPU 頁面使用的用戶端推理設定
+- `GET /config` 網頁介面使用的裝置端推理設定
 - `POST /redact` 回傳單筆文字的完整脫敏結果（含 span 與摘要）
 - `POST /redact/text` 回傳純文字脫敏結果
 - `POST /redact/batch` 批次脫敏，並回傳 span、摘要和耗時
@@ -55,29 +54,21 @@ OpenAI Privacy Filter 本身已經提供了很強的本地隱私過濾能力，�
 
 ## 網頁介面
 
-啟動服務後，在瀏覽器中開啟 <http://127.0.0.1:8080/>。
+啟動服務後，在瀏覽器中開啟 <http://127.0.0.1:8080/>。API 與網頁介面是**同一個
+服務**——不需要另外的程序或頁面。
 
-頁面提供：
+單一頁面提供：
 
+- **處理模式**選擇器（Auto／裝置端 WebGPU／伺服器端）
 - 用於輸入可能包含 PII 文字的輸入框
 - 「Detect & Redact」按鈕，高亮偵測到的實體
 - 帶複製按鈕的脫敏文字輸出
 - 依標籤統計的實體摘要
 - 多語言快速範例
 
-該介面是一個靜態單頁面（`src/web/index.html`），透過呼叫 `POST /redact`
-介面運作，因此只要 API 在執行就能使用。
+> 舊的 `/webgpu` 頁面已併入 `/`，現在會自動重新導向過去。
 
-## 裝置端 WebGPU 版本
-
-專案提供了兩個前端：
-
-| 頁面 | 位址 | 模型執行位置 |
-| --- | --- | --- |
-| 伺服器端版本 | `/` | 始終在伺服器端執行（`openai/privacy-filter`） |
-| WebGPU 版本 | `/webgpu` | 在裝置端透過 WebGPU 執行，並自動回退到伺服器端 |
-
-開啟 <http://127.0.0.1:8080/webgpu> 使用裝置端版本，共有三種模式：
+三種模式：
 
 - **Auto（預設）**：當瀏覽器支援 WebGPU **且**裝置足夠強時在瀏覽器中執行，
   否則使用伺服器端模型。軟體／回退（fallback）WebGPU 轉接器的評分為 `0`，因此即使
@@ -85,7 +76,8 @@ OpenAI Privacy Filter 本身已經提供了很強的本地隱私過濾能力，�
 - **On-device（WebGPU）**：強制在瀏覽器內推理——文字不會離開本機。首次執行會
   下載模型（之後快取）。如果裝置端處理不可用（不支援 WebGPU／被停用）或失敗，
   你的文字**不會**被送到任何地方；系統會提示你，由你**明確**選擇是否改用伺服器端。
-- **Server**：始終使用精度更高的後端模型。
+- **Server**：始終使用精度更高的後端模型——與 REST API 對外提供的
+  `openai/privacy-filter` 是同一個模型。
 
 > **隱私說明：** 自動、靜默的伺服器端回退**僅在 Auto 模式**下發生。在 On-device
 > 模式下，未經你點擊確認，應用程式絕不會上傳你的文字。
@@ -107,7 +99,8 @@ flowchart TD
     C -->|否| K[先徵求使用者同意]
     D -->|是| E
     D -->|否| S
-    E -->|出錯| K
+    E -->|出錯且為強制 On-device| K
+    E -->|出錯且為 Auto| S
     E -->|成功| R[渲染結果]
     K -->|使用者同意| S
     S --> R
